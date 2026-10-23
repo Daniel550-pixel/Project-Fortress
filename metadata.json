@@ -1,0 +1,6 @@
+{
+  "name": "Project Fortress - Language-Independent Cybersecurity Infrastructure",
+  "description": "Production-grade language-independent cybersecurity infrastructure, runtime risk reduction framework, and interactive security operations center.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

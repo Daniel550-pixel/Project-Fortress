@@ -1,0 +1,123 @@
+{
+  "timestamp": "2026-10-23T06:58:06.867Z",
+  "totalChecks": 14,
+  "passedChecks": 14,
+  "failedChecks": 0,
+  "skippedChecks": 0,
+  "status": "ALL_PASSED",
+  "durationMs": 22,
+  "results": [
+    {
+      "id": "SEC-CFG-01",
+      "category": "CONFIG",
+      "name": "Reject Weak HMAC Key",
+      "status": "PASS",
+      "executionTimeMs": 0,
+      "details": "Verified successfully against security control policy"
+    },
+    {
+      "id": "SEC-CFG-02",
+      "category": "CONFIG",
+      "name": "Reject Wildcard CORS in Production",
+      "status": "PASS",
+      "executionTimeMs": 1,
+      "details": "Verified successfully against security control policy"
+    },
+    {
+      "id": "SEC-INP-01",
+      "category": "INPUT_VALIDATION",
+      "name": "Detect and Block SQL Injection Payloads",
+      "status": "PASS",
+      "executionTimeMs": 1,
+      "details": "Verified successfully against security control policy"
+    },
+    {
+      "id": "SEC-INP-02",
+      "category": "INPUT_VALIDATION",
+      "name": "Detect NoSQL Operator Injections",
+      "status": "PASS",
+      "executionTimeMs": 1,
+      "details": "Verified successfully against security control policy"
+    },
+    {
+      "id": "SEC-INP-03",
+      "category": "INPUT_VALIDATION",
+      "name": "Detect Command Injection Attempts",
+      "status": "PASS",
+      "executionTimeMs": 1,
+      "details": "Verified successfully against security control policy"
+    },
+    {
+      "id": "SEC-INP-04",
+      "category": "INPUT_VALIDATION",
+      "name": "Detect Path Traversal & Null Bytes",
+      "status": "PASS",
+      "executionTimeMs": 0,
+      "details": "Verified successfully against security control policy"
+    },
+    {
+      "id": "SEC-INP-05",
+      "category": "INPUT_VALIDATION",
+      "name": "SSRF Guard Blocks RFC-1918 & Cloud Metadata",
+      "status": "PASS",
+      "executionTimeMs": 0,
+      "details": "Verified successfully against security control policy"
+    },
+    {
+      "id": "SEC-AUTH-01",
+      "category": "AUTH",
+      "name": "Issue & Cryptographically Verify Bearer Token",
+      "status": "PASS",
+      "executionTimeMs": 9,
+      "details": "Verified successfully against security control policy"
+    },
+    {
+      "id": "SEC-AUTH-02",
+      "category": "AUTH",
+      "name": "Reject Tampered Token Signature",
+      "status": "PASS",
+      "executionTimeMs": 1,
+      "details": "Verified successfully against security control policy"
+    },
+    {
+      "id": "SEC-AUTH-03",
+      "category": "AUTH",
+      "name": "Enforce Least-Privilege Capability Matrix",
+      "status": "PASS",
+      "executionTimeMs": 1,
+      "details": "Verified successfully against security control policy"
+    },
+    {
+      "id": "SEC-LOG-01",
+      "category": "LOGGING",
+      "name": "Deterministic Redaction of API Keys & Passwords",
+      "status": "PASS",
+      "executionTimeMs": 1,
+      "details": "Verified successfully against security control policy"
+    },
+    {
+      "id": "SEC-RAT-01",
+      "category": "RATE_LIMIT",
+      "name": "Token Bucket Depletion and Throttling",
+      "status": "PASS",
+      "executionTimeMs": 0,
+      "details": "Verified successfully against security control policy"
+    },
+    {
+      "id": "SEC-ISO-01",
+      "category": "ISOLATION",
+      "name": "Audit Production Hardened Profile Compliance",
+      "status": "PASS",
+      "executionTimeMs": 1,
+      "details": "Verified successfully against security control policy"
+    },
+    {
+      "id": "SEC-SEC-01",
+      "category": "SUPPLY_CHAIN",
+      "name": "Envelope Encryption and Key Rotation Verification",
+      "status": "PASS",
+      "executionTimeMs": 5,
+      "details": "Verified successfully against security control policy"
+    }
+  ]
+}

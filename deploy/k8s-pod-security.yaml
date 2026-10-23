@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fortress-security-gateway
+  namespace: fortress-system
+  labels:
+    app.kubernetes.io/name: fortress
+    app.kubernetes.io/part-of: sovereign-security-infrastructure
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: fortress-gateway
+  template:
+    metadata:
+      labels:
+        app: fortress-gateway
+    spec:
+      # Enforce Kubernetes Restricted Pod Security Standard
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: fortress
+          image: fortress/security-gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+          volumeMounts:
+            - name: ephemeral-tmp
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      volumes:
+        - name: ephemeral-tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi

@@ -1,0 +1,28 @@
+services:
+  fortress-gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: fortress/security-gateway:latest
+    container_name: fortress-gateway-prod
+    user: "10001:10001"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./seccomp-profile.json
+    ports:
+      - "127.0.0.1:3000:3000"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - FORTRESS_HMAC_SECRET=${FORTRESS_HMAC_SECRET}
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    restart: unless-stopped
