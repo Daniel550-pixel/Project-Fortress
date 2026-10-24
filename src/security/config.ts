@@ -23,18 +23,37 @@ export function validateAndLoadConfig(rawEnv: Record<string, string | undefined>
     throw new ValidationError(`Invalid NODE_ENV: '${rawEnv.NODE_ENV}'. Must be production, staging, development, or test.`);
   }
 
-  const port = parseInt(rawEnv.PORT || '3000', 10);
+  // If PORT is 8080 (container reverse proxy port), avoid collision and default application to port 3000
+  const rawPort = rawEnv.APP_PORT || (rawEnv.PORT === '8080' ? '3000' : rawEnv.PORT || '3000');
+  const port = parseInt(rawPort, 10);
   if (isNaN(port) || port < 1024 || port > 65535) {
-    throw new ValidationError(`Invalid PORT: '${rawEnv.PORT}'. Must be an unprivileged port between 1024 and 65535.`);
+    throw new ValidationError(`Invalid PORT: '${rawPort}'. Must be an unprivileged port between 1024 and 65535.`);
   }
 
-  const hmacSecret = rawEnv.FORTRESS_HMAC_SECRET || rawEnv.HMAC_SECRET || 'fortress-secure-default-key-32-chars-long-min!';
+  const DEFAULT_DEV_KEY = 'fortress-secure-default-key-32-chars-long-min!';
+  const rawSecret = rawEnv.FORTRESS_HMAC_SECRET || rawEnv.HMAC_SECRET;
+
+  if (['production', 'staging'].includes(nodeEnv)) {
+    if (!rawSecret || rawSecret.trim().length === 0) {
+      throw new ValidationError(`FORTRESS_HMAC_SECRET must be explicitly provided in ${nodeEnv} environment.`);
+    }
+    if (rawSecret === DEFAULT_DEV_KEY) {
+      throw new ValidationError(`Insecure default HMAC secret is prohibited in ${nodeEnv} environment.`);
+    }
+  }
+
+  const hmacSecret = rawSecret || DEFAULT_DEV_KEY;
   if (hmacSecret.length < 32) {
     throw new ValidationError('FORTRESS_HMAC_SECRET must be at least 32 characters long for cryptographic security.');
   }
 
   // Reject common default/trivial keys
-  const weakKeys = ['password', '12345678901234567890123456789012', 'secretsecretsecretsecretsecret32', 'adminadminadminadminadminadmin32'];
+  const weakKeys = [
+    'password',
+    '12345678901234567890123456789012',
+    'secretsecretsecretsecretsecret32',
+    'adminadminadminadminadminadmin32',
+  ];
   if (weakKeys.includes(hmacSecret.toLowerCase())) {
     throw new ValidationError('Insecure HMAC secret rejected: commonly known weak or repetitive pattern.');
   }

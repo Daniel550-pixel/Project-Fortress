@@ -44,3 +44,31 @@ test('Logger: stores structured audit events in queryable ring-buffer', () => {
   assert.equal(ev.sourceIp, '198.51.100.42');
   assert.equal(ev.details.password, '[REDACTED]');
 });
+
+test('Logger: safely handles circular object references without call stack overflow', () => {
+  const circularObj: any = { name: 'cyclic-node' };
+  circularObj.self = circularObj;
+  circularObj.child = { parent: circularObj };
+
+  const sanitized = redactSensitiveData(circularObj);
+  assert.equal(sanitized.name, 'cyclic-node');
+  assert.equal(sanitized.self, '[CIRCULAR_REFERENCE]');
+  assert.equal(sanitized.child.parent, '[CIRCULAR_REFERENCE]');
+});
+
+test('Logger: redacts cookies, credentials, and access tokens', () => {
+  const event = {
+    cookie: 'sessionid=abc123456789; secure; httponly',
+    access_token: 'tok_live_12345',
+    refresh_token: 'ref_tok_67890',
+    credential: 'user_vault_creds',
+    'x-api-key': 'secret-header-value',
+  };
+
+  const clean = redactSensitiveData(event);
+  assert.equal(clean.cookie, '[REDACTED]');
+  assert.equal(clean.access_token, '[REDACTED]');
+  assert.equal(clean.refresh_token, '[REDACTED]');
+  assert.equal(clean.credential, '[REDACTED]');
+  assert.equal(clean['x-api-key'], '[REDACTED]');
+});

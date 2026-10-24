@@ -71,3 +71,37 @@ test('Config: rejects privileged ports (< 1024)', () => {
     ValidationError
   );
 });
+
+test('Config: rejects missing secret or default dev secret in production and staging', () => {
+  // 1. Missing secret in production
+  assert.throws(
+    () => {
+      validateAndLoadConfig({
+        NODE_ENV: 'production',
+      });
+    },
+    (err: Error) => err instanceof ValidationError && err.message.includes('must be explicitly provided in production')
+  );
+
+  // 2. Default key passed in production
+  assert.throws(
+    () => {
+      validateAndLoadConfig({
+        NODE_ENV: 'production',
+        FORTRESS_HMAC_SECRET: 'fortress-secure-default-key-32-chars-long-min!',
+      });
+    },
+    (err: Error) => err instanceof ValidationError && err.message.includes('Insecure default HMAC secret is prohibited')
+  );
+
+  // 3. Staging also enforces explicit non-default secret
+  assert.throws(
+    () => {
+      validateAndLoadConfig({
+        NODE_ENV: 'staging',
+        FORTRESS_HMAC_SECRET: 'fortress-secure-default-key-32-chars-long-min!',
+      });
+    },
+    (err: Error) => err instanceof ValidationError && err.message.includes('Insecure default HMAC secret is prohibited')
+  );
+});

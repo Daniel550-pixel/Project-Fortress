@@ -1,18 +1,18 @@
 {
-  "timestamp": "2026-10-23T06:58:06.867Z",
+  "timestamp": "2026-10-23T07:57:12.877Z",
   "totalChecks": 14,
   "passedChecks": 14,
   "failedChecks": 0,
   "skippedChecks": 0,
   "status": "ALL_PASSED",
-  "durationMs": 22,
+  "durationMs": 25,
   "results": [
     {
       "id": "SEC-CFG-01",
       "category": "CONFIG",
       "name": "Reject Weak HMAC Key",
       "status": "PASS",
-      "executionTimeMs": 0,
+      "executionTimeMs": 1,
       "details": "Verified successfully against security control policy"
     },
     {
@@ -20,7 +20,7 @@
       "category": "CONFIG",
       "name": "Reject Wildcard CORS in Production",
       "status": "PASS",
-      "executionTimeMs": 1,
+      "executionTimeMs": 0,
       "details": "Verified successfully against security control policy"
     },
     {
@@ -28,7 +28,7 @@
       "category": "INPUT_VALIDATION",
       "name": "Detect and Block SQL Injection Payloads",
       "status": "PASS",
-      "executionTimeMs": 1,
+      "executionTimeMs": 3,
       "details": "Verified successfully against security control policy"
     },
     {
@@ -44,7 +44,7 @@
       "category": "INPUT_VALIDATION",
       "name": "Detect Command Injection Attempts",
       "status": "PASS",
-      "executionTimeMs": 1,
+      "executionTimeMs": 0,
       "details": "Verified successfully against security control policy"
     },
     {
@@ -60,7 +60,7 @@
       "category": "INPUT_VALIDATION",
       "name": "SSRF Guard Blocks RFC-1918 & Cloud Metadata",
       "status": "PASS",
-      "executionTimeMs": 0,
+      "executionTimeMs": 2,
       "details": "Verified successfully against security control policy"
     },
     {
@@ -100,7 +100,7 @@
       "category": "RATE_LIMIT",
       "name": "Token Bucket Depletion and Throttling",
       "status": "PASS",
-      "executionTimeMs": 0,
+      "executionTimeMs": 1,
       "details": "Verified successfully against security control policy"
     },
     {
@@ -108,7 +108,7 @@
       "category": "ISOLATION",
       "name": "Audit Production Hardened Profile Compliance",
       "status": "PASS",
-      "executionTimeMs": 1,
+      "executionTimeMs": 0,
       "details": "Verified successfully against security control policy"
     },
     {

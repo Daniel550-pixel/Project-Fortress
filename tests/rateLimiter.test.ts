@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TokenBucketRateLimiter } from '../src/security/rateLimiter.ts';
-import { RateLimitExceededError } from '../src/security/errors.ts';
+import { RateLimitExceededError, ValidationError } from '../src/security/errors.ts';
 
 test('RateLimiter: permits bursts up to capacity and blocks excess requests', () => {
   const limiter = new TokenBucketRateLimiter(3, 10000); // 3 tokens per 10s
@@ -35,4 +35,13 @@ test('RateLimiter: isolates quotas between distinct clients', () => {
   // client-B should still have full quota
   assert.equal(limiter.consume('client-B').allowed, true);
   assert.equal(limiter.consume('client-B').allowed, true);
+});
+
+test('RateLimiter: rejects negative, zero, NaN, or non-finite token requests', () => {
+  const limiter = new TokenBucketRateLimiter(10, 60000);
+
+  assert.throws(() => limiter.consume('client-test', -5), ValidationError);
+  assert.throws(() => limiter.consume('client-test', 0), ValidationError);
+  assert.throws(() => limiter.consume('client-test', NaN), ValidationError);
+  assert.throws(() => limiter.consume('client-test', Infinity), ValidationError);
 });

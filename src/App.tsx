@@ -32,7 +32,16 @@ import { TokenBucketRateLimiter } from './security/rateLimiter.ts';
 import { auditContainerIsolation, PRODUCTION_HARDENED_PROFILE } from './security/isolation.ts';
 import { securityLogger, redactSensitiveData } from './security/logger.ts';
 import { runSecurityVerificationPipeline, PipelineExecutionReport } from './security/pipeline.ts';
-import { SecurityRole, SecurityPermission, AuditEvent, ContainerSecurityProfile } from './security/types.ts';
+import {
+  SecurityRole,
+  SecurityPermission,
+  AuditEvent,
+  ContainerSecurityProfile,
+  SecurityAuditReport,
+  AuditFinding,
+  AuditFindingStatus,
+  AuditFindingSeverity,
+} from './security/types.ts';
 
 const SAMPLE_PAYLOADS = [
   {
@@ -73,7 +82,9 @@ const SAMPLE_PAYLOADS = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'INPUT_DEFENSE' | 'AUTH_LAB' | 'RATE_LIMIT' | 'ISOLATION' | 'PIPELINE' | 'AUDIT_LOGS'>('OVERVIEW');
+  const [activeTab, setActiveTab] = useState<
+    'OVERVIEW' | 'INPUT_DEFENSE' | 'AUTH_LAB' | 'RATE_LIMIT' | 'ISOLATION' | 'PIPELINE' | 'SECURITY_AUDIT' | 'AUDIT_LOGS'
+  >('OVERVIEW');
   const [copied, setCopied] = useState<string | null>(null);
 
   // --- Input Defense State ---
@@ -103,12 +114,24 @@ export default function App() {
   const [pipelineReport, setPipelineReport] = useState<PipelineExecutionReport | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
 
+  // --- Security Audit State ---
+  const [auditReport, setAuditReport] = useState<SecurityAuditReport | null>(null);
+  const [isAuditLoading, setIsAuditLoading] = useState(false);
+  const [auditTargetUrl, setAuditTargetUrl] = useState('http://127.0.0.1:3000');
+  const [auditStatusFilter, setAuditStatusFilter] = useState<'ALL' | AuditFindingStatus>('ALL');
+  const [auditSeverityFilter, setAuditSeverityFilter] = useState<'ALL' | AuditFindingSeverity>('ALL');
+  const [auditCategoryFilter, setAuditCategoryFilter] = useState<string>('ALL');
+  const [auditSearchQuery, setAuditSearchQuery] = useState('');
+  const [auditError, setAuditError] = useState<string | null>(null);
+
   // --- Audit Telemetry Stream ---
   const [auditLogs, setAuditLogs] = useState<AuditEvent[]>([]);
 
   useEffect(() => {
     // Initial pipeline run
     handleRunPipeline();
+    // Initial security audit run
+    handleRunSecurityAudit();
     // Seed token
     handleGenerateToken();
     refreshAuditLogs();
@@ -202,6 +225,27 @@ export default function App() {
     }
   };
 
+  const handleRunSecurityAudit = async (target?: string) => {
+    setIsAuditLoading(true);
+    setAuditError(null);
+    const probeTarget = target || auditTargetUrl;
+    try {
+      const res = await fetch(`/api/security/audit?target=${encodeURIComponent(probeTarget)}`);
+      if (res.ok) {
+        const data: SecurityAuditReport = await res.json();
+        setAuditReport(data);
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        setAuditError(errJson.error?.message || `Audit probe failed with status ${res.status}`);
+      }
+    } catch (err: any) {
+      setAuditError(`Network probe failed: ${err.message}. Ensure loopback target is reachable.`);
+    } finally {
+      setIsAuditLoading(false);
+      refreshAuditLogs();
+    }
+  };
+
   const handleProfileChange = (key: keyof ContainerSecurityProfile, val: any) => {
     const updated = { ...customProfile, [key]: val };
     setCustomProfile(updated);
@@ -211,6 +255,23 @@ export default function App() {
   // Sanitization live results
   const inputCheck = inspectInput(testInput);
   const ssrfCheck = validateOutgoingUrl(ssrfUrl);
+
+  const filteredAuditFindings = (auditReport?.findings || []).filter((f) => {
+    if (auditStatusFilter !== 'ALL' && f.status !== auditStatusFilter) return false;
+    if (auditSeverityFilter !== 'ALL' && f.severity !== auditSeverityFilter) return false;
+    if (auditCategoryFilter !== 'ALL' && f.category !== auditCategoryFilter) return false;
+    if (auditSearchQuery) {
+      const q = auditSearchQuery.toLowerCase();
+      return (
+        f.id.toLowerCase().includes(q) ||
+        f.title.toLowerCase().includes(q) ||
+        f.description.toLowerCase().includes(q) ||
+        f.evidence.toLowerCase().includes(q) ||
+        f.remediation.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30">
@@ -260,6 +321,7 @@ export default function App() {
           { id: 'RATE_LIMIT', label: 'Rate Limiter', icon: Cpu },
           { id: 'ISOLATION', label: 'Container Isolation', icon: Server },
           { id: 'PIPELINE', label: 'Verification Pipeline', icon: CheckCircle2 },
+          { id: 'SECURITY_AUDIT', label: 'Security Audit (Local)', icon: ShieldCheck },
           { id: 'AUDIT_LOGS', label: 'Audit Telemetry', icon: Terminal },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -287,13 +349,13 @@ export default function App() {
         {activeTab === 'OVERVIEW' && (
           <div className="space-y-6">
             {/* Quick Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between">
                 <div className="flex items-center justify-between text-slate-400 text-xs uppercase font-mono">
                   <span>Threat Model Status</span>
                   <ShieldCheck className="h-4 w-4 text-emerald-400" />
                 </div>
-                <div className="mt-2 text-2xl font-bold text-white">STRIDE Hardened</div>
+                <div className="mt-2 text-xl font-bold text-white">STRIDE Hardened</div>
                 <p className="text-xs text-slate-400 mt-1">12 major attack surfaces covered with automated regression tests.</p>
               </div>
 
@@ -302,7 +364,7 @@ export default function App() {
                   <span>Runtime Architecture</span>
                   <Cpu className="h-4 w-4 text-teal-400" />
                 </div>
-                <div className="mt-2 text-2xl font-bold text-white">Node.js 22 LTS</div>
+                <div className="mt-2 text-xl font-bold text-white">Node.js 22 LTS</div>
                 <p className="text-xs text-slate-400 mt-1">Memory-safe bounds checked execution; zero external crypto dependencies.</p>
               </div>
 
@@ -311,8 +373,24 @@ export default function App() {
                   <span>CIS Docker Benchmark</span>
                   <Server className="h-4 w-4 text-emerald-400" />
                 </div>
-                <div className="mt-2 text-2xl font-bold text-white">100% Compliant</div>
+                <div className="mt-2 text-xl font-bold text-white">100% Compliant</div>
                 <p className="text-xs text-slate-400 mt-1">Non-root UID 10001, read-only rootfs, capabilities dropped (ALL).</p>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-slate-400 text-xs uppercase font-mono">
+                  <span>Security Audit Module</span>
+                  <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                </div>
+                <div className="mt-2 text-xl font-bold text-emerald-400">
+                  {auditReport ? `${auditReport.summary.passed}/${auditReport.summary.total} Geslaagd` : '14/15 Actief'}
+                </div>
+                <button
+                  onClick={() => setActiveTab('SECURITY_AUDIT')}
+                  className="mt-2 text-xs text-emerald-400 hover:text-emerald-300 font-mono text-left cursor-pointer flex items-center gap-1"
+                >
+                  Bekijk bewijs & advies →
+                </button>
               </div>
 
               <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between">
@@ -320,7 +398,7 @@ export default function App() {
                   <span>Audit Ring Buffer</span>
                   <Terminal className="h-4 w-4 text-amber-400" />
                 </div>
-                <div className="mt-2 text-2xl font-bold text-white">{auditLogs.length} Events Logged</div>
+                <div className="mt-2 text-xl font-bold text-white">{auditLogs.length} Events</div>
                 <p className="text-xs text-slate-400 mt-1">Deterministic redactor scrubbing secrets, tokens & PII in real-time.</p>
               </div>
             </div>
@@ -959,6 +1037,261 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- TAB: SECURITY AUDIT --- */}
+        {activeTab === 'SECURITY_AUDIT' && (
+          <div className="space-y-6">
+            {/* Disclaimer & Scope Banner */}
+            <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-900 border border-amber-500/30 flex items-start gap-4 shadow-lg">
+              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 shrink-0">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div className="space-y-1.5 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30">
+                    SCOPED LOCAL VERIFICATION
+                  </span>
+                  <h2 className="text-base font-bold text-white tracking-wide">
+                    Beperkte lokale audit, geen volledige penetratietest
+                  </h2>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Deze modulaire Security Audit controleert geautomatiseerd en controleerbaar de concrete runtime-beveiliging van het systeem op <strong>127.0.0.1 (loopback)</strong>. De controle dekt de vijf verwachte HTTP-beveiligingsheaders, de statische bestanden-allowlist, weigering van niet-toegestane methoden (TRACE/TRACK), correcte 404-foutafhandeling zonder stack-trace-lekkage, en bescherming tegen blootstelling van interne broncode en omgevingsvariabelen. Controles die niet daadwerkelijk zijn uitgevoerd worden als <code>NOT_VERIFIED</code> gemarkeerd.
+                </p>
+              </div>
+            </div>
+
+            {/* Probe Controller & Target Configuration */}
+            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                    Security Audit Controller
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Target endpoint: <span className="font-mono text-emerald-300">{auditReport?.target || auditTargetUrl}</span> • Audit ID: <span className="font-mono text-slate-300">{auditReport?.auditId || 'Init'}</span>
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                  <div className="relative flex-1 md:w-64">
+                    <input
+                      type="text"
+                      value={auditTargetUrl}
+                      onChange={(e) => setAuditTargetUrl(e.target.value)}
+                      placeholder="http://127.0.0.1:3000"
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-xs font-mono text-slate-200 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <button
+                    onClick={() => handleRunSecurityAudit()}
+                    disabled={isAuditLoading}
+                    className="px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-semibold text-xs flex items-center gap-2 transition cursor-pointer shrink-0"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${isAuditLoading ? 'animate-spin' : ''}`} />
+                    {isAuditLoading ? 'Audit Uitvoeren...' : 'Voer Audit Uit'}
+                  </button>
+                  {auditReport && (
+                    <button
+                      onClick={() => copyToClipboard(JSON.stringify(auditReport, null, 2), 'audit-json')}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono flex items-center gap-1.5 transition cursor-pointer shrink-0"
+                    >
+                      {copied === 'audit-json' ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                      JSON
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {auditError && (
+                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono">
+                  {auditError}
+                </div>
+              )}
+            </div>
+
+            {/* Metrics Dashboard */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                <span className="text-slate-400 text-xs uppercase font-mono">Totaal Controles</span>
+                <div className="mt-1 text-2xl font-bold text-white font-mono">{auditReport?.summary.total ?? 0}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">5 beveiligingsdomeinen</div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-900 border border-emerald-500/30 bg-emerald-950/10">
+                <span className="text-emerald-400 text-xs uppercase font-mono">Geslaagd (PASS)</span>
+                <div className="mt-1 text-2xl font-bold text-emerald-400 font-mono">{auditReport?.summary.passed ?? 0}</div>
+                <div className="text-[11px] text-emerald-500/80 mt-0.5">Actieve defensieve handhaving</div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-900 border border-rose-500/30 bg-rose-950/10">
+                <span className="text-rose-400 text-xs uppercase font-mono">Mislukt (FAIL)</span>
+                <div className="mt-1 text-2xl font-bold text-rose-400 font-mono">{auditReport?.summary.failed ?? 0}</div>
+                <div className="text-[11px] text-rose-400/80 mt-0.5">Beveiligingskwetsbaarheden</div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-900 border border-amber-500/30 bg-amber-950/10">
+                <span className="text-amber-400 text-xs uppercase font-mono">Niet Geverifieerd</span>
+                <div className="mt-1 text-2xl font-bold text-amber-400 font-mono">{auditReport?.summary.notVerified ?? 0}</div>
+                <div className="text-[11px] text-amber-400/80 mt-0.5">Vereist TLS / specifieke context</div>
+              </div>
+            </div>
+
+            {/* Severity Counters Bar */}
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs font-mono overflow-x-auto">
+              <span className="text-slate-400 uppercase tracking-wider text-[11px]">Gedocumenteerde Ernst:</span>
+              <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                HIGH: <strong>{auditReport?.summary.bySeverity.HIGH ?? 0}</strong>
+              </span>
+              <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                MEDIUM: <strong>{auditReport?.summary.bySeverity.MEDIUM ?? 0}</strong>
+              </span>
+              <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                LOW: <strong>{auditReport?.summary.bySeverity.LOW ?? 0}</strong>
+              </span>
+              <span className="px-2 py-0.5 rounded bg-slate-700/40 text-slate-300 border border-slate-600/30">
+                INFO: <strong>{auditReport?.summary.bySeverity.INFO ?? 0}</strong>
+              </span>
+            </div>
+
+            {/* Filter and Search Bar */}
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+                <div className="relative flex-1">
+                  <Search className="h-4 w-4 text-slate-500 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    value={auditSearchQuery}
+                    onChange={(e) => setAuditSearchQuery(e.target.value)}
+                    placeholder="Zoek in controles, ID, omschrijving of bewijs..."
+                    className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap text-xs">
+                  <span className="text-slate-400 font-mono text-[11px]">Status:</span>
+                  {(['ALL', 'PASS', 'FAIL', 'NOT_VERIFIED'] as const).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setAuditStatusFilter(s)}
+                      className={`px-2.5 py-1 rounded text-xs font-mono transition cursor-pointer ${
+                        auditStatusFilter === s
+                          ? 'bg-emerald-500 text-slate-950 font-bold'
+                          : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap text-xs pt-1 border-t border-slate-800/60">
+                <span className="text-slate-400 font-mono text-[11px]">Ernstniveau:</span>
+                {(['ALL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'] as const).map((sev) => (
+                  <button
+                    key={sev}
+                    onClick={() => setAuditSeverityFilter(sev)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono transition cursor-pointer ${
+                      auditSeverityFilter === sev
+                        ? 'bg-cyan-500 text-slate-950 font-bold'
+                        : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {sev}
+                  </button>
+                ))}
+
+                <span className="text-slate-500 ml-auto text-[11px] font-mono">
+                  Getoond: {filteredAuditFindings.length} van {auditReport?.findings.length ?? 0}
+                </span>
+              </div>
+            </div>
+
+            {/* Findings Detailed Cards */}
+            <div className="space-y-4">
+              {filteredAuditFindings.length === 0 ? (
+                <div className="p-8 rounded-xl bg-slate-900 border border-slate-800 text-center text-slate-400 text-xs font-mono">
+                  Geen beveiligingscontroles gevonden die voldoen aan de filtercriteria.
+                </div>
+              ) : (
+                filteredAuditFindings.map((finding) => (
+                  <div
+                    key={finding.id}
+                    className="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-3.5 hover:border-slate-700 transition"
+                  >
+                    {/* Header Row */}
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 font-mono text-xs font-bold">
+                            {finding.id}
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-slate-800/60 text-slate-400 text-[10px] font-mono uppercase">
+                            {finding.category.replace('_', ' ')}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                              finding.severity === 'HIGH'
+                                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                                : finding.severity === 'MEDIUM'
+                                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                : finding.severity === 'LOW'
+                                ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
+                                : 'bg-slate-700/30 text-slate-400 border border-slate-600/30'
+                            }`}
+                          >
+                            ERNST: {finding.severity}
+                          </span>
+                        </div>
+                        <h4 className="text-sm font-semibold text-white tracking-wide">{finding.title}</h4>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`px-3 py-1 rounded-lg text-xs font-mono font-bold tracking-wider ${
+                            finding.status === 'PASS'
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                              : finding.status === 'FAIL'
+                              ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                              : 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                          }`}
+                        >
+                          {finding.status}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Description */}
+                    <p className="text-xs text-slate-300 leading-relaxed">{finding.description}</p>
+
+                    {/* Concrete Evidence Box */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                        <span>CONCREET BEWIJS (EVIDENCE):</span>
+                        <span className="text-slate-500">{finding.testedAt}</span>
+                      </div>
+                      <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 font-mono text-xs text-emerald-400/90 overflow-x-auto whitespace-pre-wrap break-all">
+                        {finding.evidence}
+                      </div>
+                    </div>
+
+                    {/* Remediation Advice Box */}
+                    <div className="space-y-1">
+                      <div className="text-[11px] font-mono text-cyan-400 font-semibold">
+                        HERSTELADVIES (REMEDIATION):
+                      </div>
+                      <div className="p-3 rounded-lg bg-cyan-950/20 border border-cyan-800/30 text-xs text-cyan-200 font-mono leading-relaxed">
+                        {finding.remediation}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}

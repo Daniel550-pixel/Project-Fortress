@@ -103,3 +103,69 @@ test('Auth: timing-safe string comparison handles equal and unequal lengths safe
   assert.equal(timingSafeEqualString('secret_token_123', 'secret_token_124'), false);
   assert.equal(timingSafeEqualString('secret', 'secret_longer'), false);
 });
+
+test('Auth: rejects algorithm confusion and invalid header types', async () => {
+  const validToken = await issueToken(
+    { id: 'usr-1', username: 'alice', role: 'ADMIN', tenantId: 't1' },
+    MASTER_KEY,
+    3600
+  );
+  const parts = validToken.split('.');
+
+  // 1. None algorithm attack
+  const noneHeader = Buffer.from(JSON.stringify({ alg: 'none', typ: 'FORTRESS-TOKEN' })).toString('base64url');
+  await assert.rejects(
+    async () => verifyToken(`${noneHeader}.${parts[1]}.${parts[2]}`, MASTER_KEY),
+    (err: Error) => err instanceof AuthenticationError && err.message.includes('signature verification failed')
+  );
+
+  // 2. Unsupported RS256 algorithm with valid signature matching that header
+  const rs256Header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'FORTRESS-TOKEN' })).toString('base64url');
+  const { createHmacSignature } = await import('../src/security/auth.ts');
+  const rsSig = await createHmacSignature(`${rs256Header}.${parts[1]}`, MASTER_KEY);
+  await assert.rejects(
+    async () => verifyToken(`${rs256Header}.${parts[1]}.${rsSig}`, MASTER_KEY),
+    (err: Error) => err instanceof AuthenticationError && err.message.includes('Only HS256 permitted')
+  );
+
+  // 3. Invalid header type
+  const badTypHeader = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const badTypSig = await createHmacSignature(`${badTypHeader}.${parts[1]}`, MASTER_KEY);
+  await assert.rejects(
+    async () => verifyToken(`${badTypHeader}.${parts[1]}.${badTypSig}`, MASTER_KEY),
+    (err: Error) => err instanceof AuthenticationError && err.message.includes('Expected FORTRESS-TOKEN')
+  );
+});
+
+test('Auth: rejects malformed, empty, or future-issued payloads', async () => {
+  const { createHmacSignature } = await import('../src/security/auth.ts');
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'FORTRESS-TOKEN' })).toString('base64url');
+
+  // 1. Empty payload {}
+  const emptyPayload = Buffer.from(JSON.stringify({})).toString('base64url');
+  const emptySig = await createHmacSignature(`${header}.${emptyPayload}`, MASTER_KEY);
+  await assert.rejects(
+    async () => verifyToken(`${header}.${emptyPayload}.${emptySig}`, MASTER_KEY),
+    (err: Error) => err instanceof AuthenticationError && err.message.includes('missing valid subject')
+  );
+
+  // 2. Future-issued token (iat in future)
+  const futureNow = Math.floor(Date.now() / 1000) + 1000;
+  const futurePayload = Buffer.from(JSON.stringify({
+    sub: 'usr-future',
+    username: 'time-traveler',
+    role: 'ADMIN',
+    permissions: [],
+    tenantId: 't1',
+    iat: futureNow,
+    exp: futureNow + 3600,
+    iss: 'fortress-auth-gateway',
+    aud: 'fortress-services',
+    jti: 'tok_future',
+  })).toString('base64url');
+  const futureSig = await createHmacSignature(`${header}.${futurePayload}`, MASTER_KEY);
+  await assert.rejects(
+    async () => verifyToken(`${header}.${futurePayload}.${futureSig}`, MASTER_KEY),
+    (err: Error) => err instanceof AuthenticationError && err.message.includes('issued in the future')
+  );
+});

@@ -151,19 +151,73 @@ export async function verifyToken(
   const [headerEncoded, payloadEncoded, signature] = parts;
   const dataToSign = `${headerEncoded}.${payloadEncoded}`;
 
+  // 1. Verify cryptographic signature first using constant-time comparison
   const expectedSignature = await createHmacSignature(dataToSign, secret);
   if (!timingSafeEqualString(signature, expectedSignature)) {
     throw new AuthenticationError('Cryptographic signature verification failed (tampered or forged token)');
   }
 
+  // 2. Validate token header
+  let header: { alg?: unknown; typ?: unknown };
+  try {
+    header = JSON.parse(fromBase64Url(headerEncoded));
+  } catch {
+    throw new AuthenticationError('Unreadable token header format');
+  }
+
+  if (typeof header !== 'object' || header === null || Array.isArray(header)) {
+    throw new AuthenticationError('Token header must be an object');
+  }
+
+  if (header.alg !== 'HS256') {
+    throw new AuthenticationError(`Unsupported or unsafe token algorithm: '${String(header.alg)}'. Only HS256 permitted.`);
+  }
+
+  if (header.typ !== 'FORTRESS-TOKEN') {
+    throw new AuthenticationError(`Invalid token type: '${String(header.typ)}'. Expected FORTRESS-TOKEN.`);
+  }
+
+  // 3. Validate token payload
   let payload: SecurityTokenPayload;
   try {
     payload = JSON.parse(fromBase64Url(payloadEncoded));
   } catch {
-    throw new AuthenticationError('Unreadable token payload');
+    throw new AuthenticationError('Unreadable token payload format');
+  }
+
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+    throw new AuthenticationError('Token payload must be an object');
+  }
+
+  // Validate mandatory claim types
+  if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
+    throw new AuthenticationError('Token payload missing valid subject (sub)');
+  }
+
+  const validRoles: SecurityRole[] = ['ADMIN', 'SECOPS', 'AUDIT', 'SERVICE', 'ANONYMOUS'];
+  if (!validRoles.includes(payload.role)) {
+    throw new AuthenticationError(`Token payload contains invalid role: '${String(payload.role)}'`);
+  }
+
+  if (!Array.isArray(payload.permissions)) {
+    throw new AuthenticationError('Token payload permissions must be an array');
+  }
+
+  if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp)) {
+    throw new AuthenticationError('Token payload missing valid expiration timestamp (exp)');
+  }
+
+  if (typeof payload.iat !== 'number' || !Number.isFinite(payload.iat)) {
+    throw new AuthenticationError('Token payload missing valid issuance timestamp (iat)');
   }
 
   const now = Math.floor(Date.now() / 1000);
+
+  // Reject future-issued tokens (exceeding 300s clock skew)
+  if (payload.iat > now + 300) {
+    throw new AuthenticationError('Token issued in the future (exceeds clock skew tolerance)');
+  }
+
   if (payload.exp <= now) {
     throw new AuthenticationError(`Token expired at ${new Date(payload.exp * 1000).toISOString()}`);
   }

@@ -21,9 +21,9 @@ const REDACTION_PATTERNS = [
 ];
 
 /**
- * Deeply redacts sensitive strings and object properties.
+ * Deeply redacts sensitive strings and object properties with cycle detection.
  */
-export function redactSensitiveData<T>(input: T): T {
+export function redactSensitiveData<T>(input: T, seen = new WeakSet<object>()): T {
   if (input === null || input === undefined) {
     return input;
   }
@@ -36,11 +36,16 @@ export function redactSensitiveData<T>(input: T): T {
     return result as unknown as T;
   }
 
-  if (Array.isArray(input)) {
-    return input.map((item) => redactSensitiveData(item)) as unknown as T;
-  }
-
   if (typeof input === 'object') {
+    if (seen.has(input as object)) {
+      return '[CIRCULAR_REFERENCE]' as unknown as T;
+    }
+    seen.add(input as object);
+
+    if (Array.isArray(input)) {
+      return input.map((item) => redactSensitiveData(item, seen)) as unknown as T;
+    }
+
     const copy: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(input)) {
       const lowerKey = key.toLowerCase();
@@ -51,11 +56,17 @@ export function redactSensitiveData<T>(input: T): T {
         lowerKey.includes('api_key') ||
         lowerKey.includes('token') ||
         lowerKey.includes('privatekey') ||
-        lowerKey.includes('authorization')
+        lowerKey.includes('private_key') ||
+        lowerKey.includes('authorization') ||
+        lowerKey.includes('cookie') ||
+        lowerKey.includes('credential') ||
+        lowerKey.includes('x-api-key') ||
+        lowerKey.includes('access_token') ||
+        lowerKey.includes('refresh_token')
       ) {
         copy[key] = '[REDACTED]';
       } else {
-        copy[key] = redactSensitiveData(value);
+        copy[key] = redactSensitiveData(value, seen);
       }
     }
     return copy as unknown as T;

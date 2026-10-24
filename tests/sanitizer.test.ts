@@ -106,6 +106,53 @@ test('SSRF Guard: blocks loopback, RFC-1918, and cloud metadata endpoints', () =
   assert.equal(pubResult.isValid, true, `Legitimate URL was blocked: ${publicUrl}`);
 });
 
+test('SSRF Guard: blocks alternative IP encodings, IPv6, cloud hostnames, and rebinding evasions', () => {
+  const evasionVectors = [
+    // Octal IP encodings
+    'http://0177.0.0.1/admin',
+    'http://012.0.0.1/secrets',
+    // Hexadecimal IP encodings
+    'http://0x7f000001/',
+    'http://0x7f.0.0.1/',
+    'http://0x0a000001/status',
+    // Dword (decimal integer) IP encoding
+    'http://2130706433/', // 127.0.0.1
+    'http://2852036609/', // 169.254.0.1
+    // Cloud metadata hostnames
+    'http://metadata.google.internal/computeMetadata/v1/',
+    'http://instance-data/latest/meta-data/',
+    // Internal domain suffixes
+    'http://database.internal:5432/',
+    'http://api.local/v1/',
+    'http://worker.localhost/job',
+    // DNS Wildcard rebinding
+    'http://127.0.0.1.nip.io/admin',
+    'http://169-254-169-254.sslip.io/meta-data',
+    // Embedded credentials in authority
+    'http://admin:secret@127.0.0.1/',
+    'http://user:pass@google.com/',
+    // IPv6 evasions
+    'http://[::1]/internal',
+    'http://[0:0:0:0:0:0:0:1]/',
+    'http://[::]/',
+    'http://[fe80::1]/', // link-local
+    'http://[fd00::1]/', // unique local
+    'http://[::ffff:127.0.0.1]/', // IPv4-mapped IPv6
+    'http://[::ffff:7f00:1]/',
+    // High-risk internal service ports
+    'http://example.com:22/ssh',
+    'http://example.com:6379/redis',
+    'http://example.com:3306/mysql',
+    'http://example.com:2375/docker',
+  ];
+
+  for (const vector of evasionVectors) {
+    const result = validateOutgoingUrl(vector);
+    assert.equal(result.isValid, false, `SSRF evasion bypassed guard: ${vector}`);
+    assert.ok(result.reason, `Missing block reason for: ${vector}`);
+  }
+});
+
 test('XSS: properly escapes dangerous HTML characters', () => {
   const unescaped = '<script>alert("pwned")</script> & "quotes"';
   const escaped = escapeHtml(unescaped);

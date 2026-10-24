@@ -4,7 +4,7 @@
  */
 
 import { RateLimitStatus } from './types.ts';
-import { RateLimitExceededError } from './errors.ts';
+import { RateLimitExceededError, ValidationError } from './errors.ts';
 
 interface Bucket {
   tokens: number;
@@ -35,6 +35,10 @@ export class TokenBucketRateLimiter {
    * Attempts to consume N tokens for a given identifier (IP or token).
    */
   public consume(clientId: string, tokensRequested = 1): RateLimitStatus {
+    if (!Number.isFinite(tokensRequested) || tokensRequested < 1) {
+      throw new ValidationError('Invalid tokensRequested: must be a positive finite integer >= 1');
+    }
+    const requested = Math.floor(tokensRequested);
     const now = Date.now();
     let bucket = this.buckets.get(clientId);
 
@@ -49,8 +53,8 @@ export class TokenBucketRateLimiter {
       bucket.lastRefill = now;
     }
 
-    if (bucket.tokens >= tokensRequested) {
-      bucket.tokens -= tokensRequested;
+    if (bucket.tokens >= requested) {
+      bucket.tokens -= requested;
       return {
         allowed: true,
         limit: this.capacity,
@@ -60,7 +64,7 @@ export class TokenBucketRateLimiter {
     }
 
     // Rate limit hit
-    const deficit = tokensRequested - bucket.tokens;
+    const deficit = requested - bucket.tokens;
     const retryAfterSec = Math.max(1, Math.ceil(deficit / this.refillTokensPerSec));
 
     return {

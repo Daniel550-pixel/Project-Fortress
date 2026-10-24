@@ -40,7 +40,17 @@ export interface SecurityTokenPayload {
 export interface AuditEvent {
   id: string;
   timestamp: string;
-  eventType: 'AUTH_SUCCESS' | 'AUTH_FAILURE' | 'INJECTION_DETECTED' | 'RATE_LIMITED' | 'CONFIG_VALIDATED' | 'SECRET_ROTATED' | 'ISOLATION_CHECK';
+  eventType:
+    | 'AUTH_SUCCESS'
+    | 'AUTH_FAILURE'
+    | 'INJECTION_DETECTED'
+    | 'RATE_LIMITED'
+    | 'CONFIG_VALIDATED'
+    | 'SECRET_ROTATED'
+    | 'ISOLATION_CHECK'
+    | 'DISALLOWED_METHOD_BLOCKED'
+    | 'UNAUTHORIZED_FILE_ACCESS'
+    | 'SECURITY_AUDIT_RUN';
   severity: ThreatLevel;
   sourceIp: string;
   principal: string;
@@ -89,3 +99,46 @@ export interface VerificationCheckResult {
   details: string;
   evidence?: unknown;
 }
+
+export type AuditFindingStatus = 'PASS' | 'FAIL' | 'NOT_VERIFIED';
+export type AuditFindingSeverity = 'INFO' | 'LOW' | 'MEDIUM' | 'HIGH';
+export type AuditFindingCategory =
+  | 'SECURITY_HEADERS'
+  | 'STATIC_ALLOWLIST'
+  | 'HTTP_METHODS'
+  | 'ROUTE_HANDLING'
+  | 'SOURCE_EXPOSURE'
+  | 'ENVIRONMENT';
+
+export interface AuditFinding {
+  id: string;
+  title: string;
+  category: AuditFindingCategory;
+  description: string;
+  status: AuditFindingStatus;
+  severity: AuditFindingSeverity;
+  evidence: string;
+  remediation: string;
+  testedAt: string;
+}
+
+export interface SecurityAuditReport {
+  auditId: string;
+  timestamp: string;
+  target: string;
+  disclaimer: string;
+  summary: {
+    total: number;
+    passed: number;
+    failed: number;
+    notVerified: number;
+    bySeverity: {
+      HIGH: number;
+      MEDIUM: number;
+      LOW: number;
+      INFO: number;
+    };
+  };
+  findings: AuditFinding[];
+}
+

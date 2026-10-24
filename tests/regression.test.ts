@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { inspectInput, escapeHtml } from '../src/security/sanitizer.ts';
 import { redactSensitiveData } from '../src/security/logger.ts';
-import { SecretManager } from '../src/security/secrets.ts';
+import { SecretManager, computeSha256 } from '../src/security/secrets.ts';
 
 test('Regression: ReDoS resilience against long repetitive strings', () => {
   // 50,000 characters of repetitive input
@@ -46,4 +46,21 @@ test('Regression: SecretManager zeroize clears buffer contents in place', () => 
   for (let i = 0; i < sensitiveBuffer.length; i++) {
     assert.equal(sensitiveBuffer[i], 0);
   }
+});
+
+test('Regression: computeSha256 produces exact NIST standard test vectors', () => {
+  const enc = new TextEncoder();
+
+  // Test Vector 1: SHA-256("")
+  const emptyHash = Buffer.from(computeSha256(enc.encode(''))).toString('hex');
+  assert.equal(emptyHash, 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+
+  // Test Vector 2: SHA-256("abc")
+  const abcHash = Buffer.from(computeSha256(enc.encode('abc'))).toString('hex');
+  assert.equal(abcHash, 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+
+  // Test Vector 3: SecretManager deriveKeyBytes matches NIST standard
+  const sm = new SecretManager();
+  const derived = Buffer.from(sm.deriveKeyBytes('abc')).toString('hex');
+  assert.equal(derived, 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
 });
